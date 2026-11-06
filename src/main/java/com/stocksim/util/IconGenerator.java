@@ -1,0 +1,6 @@
+package com.stocksim.util;
+import javax.imageio.ImageIO;import java.awt.*;import java.awt.image.BufferedImage;import java.io.*;import java.nio.ByteBuffer;import java.nio.ByteOrder;import java.nio.file.*;
+/** Creates the PNG and Windows ICO app icons from a small Java drawing. */
+public class IconGenerator {
+ public static void main(String[] args)throws Exception{var image=new BufferedImage(64,64,BufferedImage.TYPE_INT_ARGB);var g=image.createGraphics();g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);g.setColor(new Color(18,45,75));g.fillRoundRect(0,0,64,64,12,12);g.setColor(new Color(40,210,150));g.setStroke(new BasicStroke(5,BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND));g.drawLine(9,49,24,37);g.drawLine(24,37,35,42);g.drawLine(35,42,54,15);g.dispose();Path png=Path.of("icon.png"),ico=Path.of("icon.ico");ImageIO.write(image,"png",png.toFile());byte[] data=Files.readAllBytes(png);try(var out=new DataOutputStream(Files.newOutputStream(ico))){out.writeShort(0);out.writeShort(1);out.writeShort(1);out.writeByte(64);out.writeByte(64);out.writeByte(0);out.writeByte(0);out.writeShort(1);out.writeShort(32);out.writeInt(data.length);out.writeInt(22);out.write(data);}System.out.println("Created icon.png and icon.ico");}
+}

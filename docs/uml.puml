@@ -1,0 +1,28 @@
+@startuml
+interface Tradable { +getSymbol(): String +getPrice(): double }
+class Stock { -symbol: String -name: String -price: double +setPrice(double): void }
+class Trader { -id: String -name: String -wallet: double +debit(double): void +credit(double): void }
+class Portfolio { -holdings: HashMap +add(...) +remove(...) +value(...): double }
+abstract class Order { -id: String -price: double -quantity: int -time: Instant +getSide(): String }
+class BuyOrder
+class SellOrder
+class OrderBook { -buys: PriorityQueue +placeBuy(...) +placeSell(...) +match(...) }
+class Trade { +id: String +symbol: String +quantity: int +price: double }
+class TradeHistory { -trades: ArrayList +add(Trade) }
+class PriceUpdater { +run(): void +stop(): void }
+class InsufficientFundsException
+class MainWindow
+Stock ..|> Tradable
+BuyOrder --|> Order
+SellOrder --|> Order
+OrderBook o-- BuyOrder
+OrderBook o-- SellOrder
+OrderBook --> TradeHistory
+Order --> Trader
+Order --> Stock
+Trader *-- Portfolio
+TradeHistory o-- Trade
+PriceUpdater --> Stock
+OrderBook ..> InsufficientFundsException
+MainWindow --> OrderBook
+@enduml
