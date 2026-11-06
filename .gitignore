@@ -1,0 +1,9 @@
+target/
+outputs/
+*.class
+*.log
+.idea/
+.vscode/
+*.iml
+.DS_Store
+# Keep data/*.csv sample files under version control
