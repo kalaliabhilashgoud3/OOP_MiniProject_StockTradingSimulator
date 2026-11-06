@@ -14,11 +14,11 @@ This Java 17 Swing project uses a price-time priority order book. Buy orders sor
 
 | Team member (name, roll number) |
 |---|
-| [Name, Roll No] |
-| [Name, Roll No] |
-| [Name, Roll No] |
-| [Name, Roll No] |
-| [Name, Roll No] |
+| 25rbaim0028 — K.Abhilash Goud |
+| 25rbaim0026 — K.chandhan |
+| 25rbaim0027 — Narsing |
+| 25rbaim0029 — K.thanish |
+| 25rbaim0030 — saikiran |
 
 ## Module contributions
 
