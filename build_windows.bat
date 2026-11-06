@@ -1,5 +1,5 @@
 @echo off
-setlocal
+setlocal EnableDelayedExpansion
 set "MAVEN_CMD=mvn"
 where mvn >nul 2>nul
 if errorlevel 1 (
@@ -14,7 +14,7 @@ set "JPACKAGE=jpackage"
 where jpackage >nul 2>nul
 if errorlevel 1 (
   for /d %%D in ("%ProgramFiles%\Java\jdk-*") do if exist "%%~fD\bin\jpackage.exe" set "JPACKAGE=%%~fD\bin\jpackage.exe"
-  if "%JPACKAGE%"=="jpackage" (
+  if "!JPACKAGE!"=="jpackage" (
     echo JDK 17+ with jpackage is required.
     exit /b 1
   )
