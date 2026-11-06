@@ -44,7 +44,9 @@ The main window has Market, Place Order, Order Book, Portfolio, and Trade Histor
 
 ## Desktop app build
 
-Run `build_windows.bat` from a Windows terminal with JDK 17+ installed. It builds the runnable JAR, creates a Windows app image with `jpackage`, and includes `icon.ico`. The generated app is in `dist/StockTradingSimulator`. Run `create_desktop_shortcut.ps1` from the project folder (or pass `-AppPath` to the app folder) to put a shortcut on the Desktop. Double-click **StockTradingSimulator** on the Desktop to start the simulator. `jpackage --type app-image` does not need WiX; EXE/MSI packaging can be added optionally when WiX is installed.
+Run `create_desktop_shortcut.ps1` from the project folder to create `StockTradingSimulator.bat` and a matching `.lnk` shortcut on the Windows Desktop. The shortcut uses `icon.ico` and launches `stocksim.jar`; double-click the shortcut to run the simulator. This requires JDK 17+.
+
+For a packaged Windows app image, run `build_windows.bat`. It uses `jpackage --type app-image`, so WiX is not required. EXE/MSI packaging can be added optionally when WiX is installed.
 
 `icon.png` and `icon.ico` are the stock-chart app icon used by the Swing window and Windows packaging.
 
