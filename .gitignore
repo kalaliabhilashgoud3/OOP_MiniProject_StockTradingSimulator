@@ -1,6 +1,17 @@
 target/
 dist/
 outputs/
+work/
+data/*.tmp
+data/*.bak
+data/portfolio.csv
+data/portfolio_summary.csv
+data/active_orders.csv
+data/transactions.csv
+data/watchlists.csv
+data/price_history.csv
+data/performance.csv
+data/preferences.csv
 *.class
 *.log
 .idea/

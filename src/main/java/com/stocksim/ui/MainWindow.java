@@ -1,15 +1,213 @@
 package com.stocksim.ui;
-import com.stocksim.exception.InsufficientFundsException;import com.stocksim.model.*;import com.stocksim.service.*;import com.stocksim.util.CsvStore;
-import javax.swing.*;import javax.swing.table.DefaultTableModel;import java.awt.*;import java.nio.file.Path;import java.util.*;
+
+import com.stocksim.model.Stock;
+import com.stocksim.model.Trader;
+import com.stocksim.service.TradingPlatform;
+import com.stocksim.ui.components.Theme;
+import com.stocksim.ui.screens.*;
+import javax.swing.BorderFactory;
+import javax.swing.JButton;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
+import javax.swing.Timer;
+import java.awt.BorderLayout;
+import java.awt.CardLayout;
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.Graphics2D;
+import java.awt.Image;
+import java.awt.RenderingHints;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.function.Supplier;
+
+/** Main navigation window for the stock market simulator. */
 public class MainWindow extends JFrame {
- private final Map<String,Stock> stocks=new LinkedHashMap<>();private final Map<String,Trader> traders=new LinkedHashMap<>();private final TradeHistory history=new TradeHistory();private final OrderBook book=new OrderBook(history);private final DefaultTableModel marketModel=model("Symbol","Company","Price (₹)"),buyModel=model("Trader","Symbol","Limit (₹)","Qty"),sellModel=model("Trader","Symbol","Limit (₹)","Qty"),tradeModel=model("Symbol","Buyer","Seller","Qty","Price (₹)");
- public MainWindow(){super("Stock Trading Simulator");setDefaultCloseOperation(EXIT_ON_CLOSE);setSize(900,600);setLocationRelativeTo(null);setIconImage(createIcon());seed();JTabbedPane tabs=new JTabbedPane();tabs.add("Market",new JScrollPane(new JTable(marketModel)));tabs.add("Place Order",orderPanel());tabs.add("Order Book",bookPanel());tabs.add("Portfolio",portfolioPanel());tabs.add("Trade History",new JScrollPane(new JTable(tradeModel)));setContentPane(tabs);refresh();new Thread(new PriceUpdater(stocks.values()),"stock-price-updater").start();new javax.swing.Timer(3000,e->refresh()).start();addWindowListener(new java.awt.event.WindowAdapter(){@Override public void windowClosing(java.awt.event.WindowEvent e){saveData();}});}
- private static DefaultTableModel model(String...cols){return new DefaultTableModel(cols,0){public boolean isCellEditable(int r,int c){return false;}};}
- private void seed(){try{for(Stock s:CsvStore.loadStocks(Path.of("data/stocks.csv")))stocks.put(s.getSymbol(),s);for(Trader t:CsvStore.loadTraders(Path.of("data/traders.csv")))traders.put(t.getId(),t);history.addAll(CsvStore.loadTrades(Path.of("data/trades.csv")));}catch(Exception ex){stocks.clear();traders.clear();}if(stocks.isEmpty()){stocks.put("MNR",new Stock("MNR","MNR Industries",250));stocks.put("TECH",new Stock("TECH","Tech Solutions",420));stocks.put("BANK",new Stock("BANK","Banking Corp",180));}if(traders.isEmpty()){traders.put("T001",new Trader("T001","Aarav",100000));traders.put("T002",new Trader("T002","Diya",100000));traders.put("T003",new Trader("T003","Kabir",75000));traders.put("T004",new Trader("T004","Meera",80000));traders.put("T005",new Trader("T005","Ishaan",50000));}if(stocks.containsKey("MNR")){if(traders.containsKey("T002"))traders.get("T002").getPortfolio().add("MNR",20,stocks.get("MNR").getPrice());if(traders.containsKey("T004"))traders.get("T004").getPortfolio().add("MNR",15,stocks.get("MNR").getPrice());}}
- private JPanel orderPanel(){JPanel p=new JPanel(new GridLayout(0,2,8,8));JComboBox<String> side=new JComboBox<>(new String[]{"BUY","SELL"}),trader=new JComboBox<>(traders.keySet().toArray(String[]::new)),symbol=new JComboBox<>(stocks.keySet().toArray(String[]::new));JTextField price=new JTextField(),qty=new JTextField();JButton submit=new JButton("Place order");p.add(new JLabel("Side"));p.add(side);p.add(new JLabel("Trader"));p.add(trader);p.add(new JLabel("Stock"));p.add(symbol);p.add(new JLabel("Limit price (₹)"));p.add(price);p.add(new JLabel("Quantity"));p.add(qty);p.add(new JLabel());p.add(submit);submit.addActionListener(e->{try{double px=Double.parseDouble(price.getText());int q=Integer.parseInt(qty.getText());Stock s=stocks.get(symbol.getSelectedItem());Trader t=traders.get(trader.getSelectedItem());if(side.getSelectedItem().equals("BUY"))book.placeBuy(new BuyOrder(t,s,px,q));else book.placeSell(new SellOrder(t,s,px,q));refresh();JOptionPane.showMessageDialog(this,"Order placed successfully.");}catch(NumberFormatException ex){JOptionPane.showMessageDialog(this,"Enter a valid price and whole-number quantity.");}catch(InsufficientFundsException|IllegalArgumentException ex){JOptionPane.showMessageDialog(this,ex.getMessage(),"Order not placed",JOptionPane.WARNING_MESSAGE);}finally{price.setText("");qty.setText("");}});return p;}
- private JPanel bookPanel(){JPanel p=new JPanel(new GridLayout(1,2));p.add(new JScrollPane(new JTable(buyModel)));p.add(new JScrollPane(new JTable(sellModel)));return p;}
- private JPanel portfolioPanel(){JPanel p=new JPanel(new BorderLayout());JComboBox<String> trader=new JComboBox<>(traders.keySet().toArray(String[]::new));JLabel summary=new JLabel("Select a trader");trader.addActionListener(e->{Trader t=traders.get(trader.getSelectedItem());double value=t.getPortfolio().value(stocks);summary.setText("Wallet ₹"+String.format("%.2f",t.getWallet())+" | Holdings ₹"+String.format("%.2f",value)+" | P/L ₹"+String.format("%.2f",value-t.getPortfolio().cost()));});p.add(trader,BorderLayout.NORTH);p.add(summary,BorderLayout.CENTER);return p;}
- private void refresh(){marketModel.setRowCount(0);for(Stock s:stocks.values())marketModel.addRow(new Object[]{s.getSymbol(),s.getName(),String.format("%.2f",s.getPrice())});buyModel.setRowCount(0);for(BuyOrder o:book.getBuys())buyModel.addRow(new Object[]{o.getTrader().getName(),o.getStock().getSymbol(),o.getPrice(),o.getQuantity()});sellModel.setRowCount(0);for(SellOrder o:book.getSells())sellModel.addRow(new Object[]{o.getTrader().getName(),o.getStock().getSymbol(),o.getPrice(),o.getQuantity()});tradeModel.setRowCount(0);for(Trade t:history.getAll())tradeModel.addRow(new Object[]{t.symbol(),t.buyer(),t.seller(),t.quantity(),t.price()});}
- private Image createIcon(){var img=new java.awt.image.BufferedImage(64,64,java.awt.image.BufferedImage.TYPE_INT_ARGB);Graphics2D g=img.createGraphics();g.setColor(new Color(18,45,75));g.fillRoundRect(0,0,64,64,12,12);g.setColor(new Color(40,210,150));g.setStroke(new BasicStroke(4));g.drawLine(10,48,24,36);g.drawLine(24,36,34,41);g.drawLine(34,41,52,16);g.dispose();return img;}
- public void saveData(){try{CsvStore.saveStocks(stocks.values(),Path.of("data/stocks.csv"));CsvStore.saveTraders(traders.values(),Path.of("data/traders.csv"));CsvStore.saveTrades(history,Path.of("data/trades.csv"));}catch(Exception e){JOptionPane.showMessageDialog(this,"Could not save data: "+e.getMessage());}}
+    private final TradingPlatform platform;
+    private final Map<String, JPanel> screens = new LinkedHashMap<>();
+    private final Map<String, Refreshable> refreshables = new LinkedHashMap<>();
+    private final CardLayout cards = new CardLayout();
+    private final JPanel content = new JPanel(cards);
+    private final JLabel pageTitle = new JLabel("Dashboard");
+    private final JLabel marketState = new JLabel("SIMULATED MARKET · OPEN");
+    private final JLabel toast = new JLabel("Ready");
+    private final javax.swing.JComboBox<String> traderChoice = new javax.swing.JComboBox<>();
+    private final javax.swing.JTextField quickSearch = new javax.swing.JTextField(15);
+    private String activeTrader;
+    private String selectedSymbol;
+
+    public MainWindow() {
+        super("Stock Trading Simulator 2.0");
+        Theme.install();
+        try {
+            platform = TradingPlatform.open(Path.of("data"));
+        } catch (IOException ex) {
+            throw new IllegalStateException("Could not load simulator data: " + ex.getMessage(), ex);
+        }
+        if (platform.getTraderList().isEmpty()) throw new IllegalStateException("No sample trader accounts were found.");
+        activeTrader = platform.getTraderList().get(0).getId();
+        platform.getTraderList().forEach(t -> traderChoice.addItem(t.getId() + " · " + t.getName()));
+        traderChoice.addActionListener(e -> {
+            int index = traderChoice.getSelectedIndex();
+            if (index >= 0 && index < platform.getTraderList().size()) {
+                activeTrader = platform.getTraderList().get(index).getId();
+                refreshVisible();
+            }
+        });
+        setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
+        setMinimumSize(new Dimension(1120, 720));
+        setSize(1440, 900);
+        setLocationRelativeTo(null);
+        setIconImage(createIcon());
+        buildScreens();
+        setContentPane(buildShell());
+        showScreen("Dashboard");
+        platform.getPriceUpdater().setDelayMillis(platform.getMarket().getTickMillis());
+        Thread worker = new Thread(platform.getPriceUpdater(), "stock-price-updater");
+        worker.setDaemon(true);
+        worker.start();
+        new Timer(1800, e -> {
+            marketState.setText("SIMULATED MARKET · " + (platform.getMarket().isMarketOpen() ? "OPEN" : "CLOSED"));
+            refreshVisible();
+        }).start();
+        addWindowListener(new WindowAdapter() {
+            @Override public void windowClosing(WindowEvent event) { closeAndSave(); }
+        });
+    }
+
+    private Supplier<Trader> traderSupplier() { return () -> platform.getTrader(activeTrader); }
+
+    private void buildScreens() {
+        addScreen("Dashboard", new DashboardScreen(platform, traderSupplier()));
+        addScreen("Markets", new MarketsScreen(platform, traderSupplier(), this::showDetails, this::showTrade, this::notifyUser));
+        addScreen("Watchlists", new WatchlistsScreen(platform, traderSupplier(), this::showDetails, this::showTrade, this::notifyUser));
+        addScreen("Stock details", new StockDetailsScreen(platform, traderSupplier(), this::showTrade, this::notifyUser));
+        addScreen("Buy / Sell", new TradeScreen(platform, traderSupplier(), this::notifyUser));
+        addScreen("Portfolio", new PortfolioScreen(platform, traderSupplier(), this::showDetails, this::showTrade));
+        addScreen("Orders", new OrdersScreen(platform, traderSupplier(), this::notifyUser));
+        addScreen("Order book", new OrderBookScreen(platform, traderSupplier(), this::notifyUser));
+        addScreen("History", new HistoryScreen(platform, traderSupplier(), this::notifyUser));
+        addScreen("Market activity", new NewsScreen(platform));
+        addScreen("Analytics", new AnalyticsScreen(platform, traderSupplier()));
+        addScreen("Leaderboard", new LeaderboardScreen(platform));
+        addScreen("Account", new AccountScreen(platform, traderSupplier(), this::notifyUser));
+        addScreen("Settings", new SettingsScreen(platform, this::saveNow));
+    }
+
+    private void addScreen(String name, JPanel screen) {
+        screens.put(name, screen);
+        if (screen instanceof Refreshable refreshable) refreshables.put(name, refreshable);
+        content.add(screen, name);
+    }
+
+    private JPanel buildShell() {
+        JPanel root = new JPanel(new BorderLayout());
+        root.setBackground(Theme.BACKGROUND);
+        JPanel header = new JPanel(new BorderLayout(18, 0));
+        header.setBackground(Theme.NAVY);
+        header.setBorder(BorderFactory.createEmptyBorder(14, 22, 14, 22));
+        JLabel brand = new JLabel("◈  STOCKSIM  /  PAPER TRADING");
+        brand.setForeground(Color.WHITE); brand.setFont(new Font("Segoe UI", Font.BOLD, 16));
+        pageTitle.setForeground(Color.WHITE); pageTitle.setFont(new Font("Segoe UI", Font.BOLD, 19));
+        marketState.setForeground(new Color(148, 233, 198));
+        JPanel centerHeader = new JPanel(new BorderLayout(20, 0)); centerHeader.setOpaque(false);
+        JPanel search = new JPanel(new BorderLayout(5, 0)); search.setOpaque(false);
+        quickSearch.setToolTipText("Find a stock by symbol or company name");
+        JButton searchButton = new JButton("Search"); searchButton.addActionListener(e -> searchStock());
+        quickSearch.addActionListener(e -> searchStock());
+        search.add(quickSearch, BorderLayout.CENTER); search.add(searchButton, BorderLayout.EAST);
+        JPanel right = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT, 9, 0)); right.setOpaque(false);
+        JButton notifications = new JButton("Activity");
+        notifications.setToolTipText("Open recent simulated market activity");
+        notifications.addActionListener(e -> showScreen("Market activity"));
+        JButton settings = new JButton("Settings"); settings.addActionListener(e -> showScreen("Settings"));
+        right.add(marketState); right.add(notifications); right.add(traderChoice); right.add(settings);
+        centerHeader.add(pageTitle, BorderLayout.WEST); centerHeader.add(search, BorderLayout.CENTER);
+        header.add(brand, BorderLayout.WEST); header.add(centerHeader, BorderLayout.CENTER); header.add(right, BorderLayout.EAST);
+        JPanel sidebar = new JPanel();
+        sidebar.setBackground(Color.WHITE); sidebar.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, new Color(229, 235, 243)));
+        sidebar.setLayout(new java.awt.GridLayout(0, 1, 0, 5));
+        sidebar.setPreferredSize(new Dimension(205, 0));
+        String[] names = {"Dashboard", "Markets", "Watchlists", "Stock details", "Buy / Sell", "Portfolio", "Orders", "Order book", "History", "Market activity", "Analytics", "Leaderboard", "Account", "Settings"};
+        for (String name : names) {
+            JButton button = new JButton(name);
+            button.setHorizontalAlignment(SwingConstants.LEFT);
+            button.setFocusPainted(false); button.setBorderPainted(false); button.setBackground(Color.WHITE); button.setForeground(Theme.TEXT);
+            button.setBorder(BorderFactory.createEmptyBorder(11, 18, 11, 8));
+            button.addActionListener(e -> showScreen(name));
+            sidebar.add(button);
+        }
+        JPanel bottom = new JPanel(new BorderLayout());
+        bottom.setBackground(Theme.BACKGROUND); bottom.setBorder(BorderFactory.createEmptyBorder(4, 12, 5, 12));
+        toast.setForeground(Theme.MUTED); bottom.add(toast, BorderLayout.CENTER);
+        root.add(header, BorderLayout.NORTH); root.add(sidebar, BorderLayout.WEST); root.add(content, BorderLayout.CENTER); root.add(bottom, BorderLayout.SOUTH);
+        return root;
+    }
+
+    private void showScreen(String name) {
+        if (!screens.containsKey(name)) return;
+        pageTitle.setText(name);
+        cards.show(content, name);
+        Refreshable screen = refreshables.get(name);
+        if (screen != null) screen.refreshScreen();
+    }
+
+    private void showDetails(Stock stock) {
+        selectedSymbol = stock.getSymbol();
+        ((StockDetailsScreen) screens.get("Stock details")).setStock(stock);
+        showScreen("Stock details");
+    }
+    private void showTrade(Stock stock) {
+        selectedSymbol = stock.getSymbol();
+        ((TradeScreen) screens.get("Buy / Sell")).setStock(stock);
+        showScreen("Buy / Sell");
+    }
+    private void refreshVisible() {
+        Refreshable current = refreshables.get(pageTitle.getText());
+        if (current != null) current.refreshScreen();
+    }
+    private void notifyUser(String message) { toast.setText(message); }
+
+    private void searchStock() {
+        String query = quickSearch.getText().trim();
+        if (query.isEmpty()) { notifyUser("Type a stock symbol or company name to search."); return; }
+        Stock stock = platform.getStockList().stream()
+                .filter(item -> item.getSymbol().equalsIgnoreCase(query) || item.getName().toLowerCase().contains(query.toLowerCase()))
+                .findFirst().orElse(null);
+        if (stock == null) { notifyUser("No matching stock found in the simulated market."); return; }
+        showDetails(stock);
+    }
+
+    private void saveNow() {
+        try { platform.save(); notifyUser("All simulator data saved to the data folder."); }
+        catch (IOException ex) { notifyUser("Save failed: " + ex.getMessage()); }
+    }
+
+    private void closeAndSave() {
+        try { platform.close(); dispose(); }
+        catch (IOException ex) {
+            int choice = JOptionPane.showConfirmDialog(this, "Could not save all data: " + ex.getMessage() + "\nClose anyway?", "Save error", JOptionPane.YES_NO_OPTION);
+            if (choice == JOptionPane.YES_OPTION) dispose();
+        }
+    }
+
+    private Image createIcon() {
+        BufferedImage image = new BufferedImage(64, 64, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = image.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g.setColor(Theme.NAVY); g.fillRoundRect(0, 0, 64, 64, 15, 15);
+        g.setColor(new Color(49, 211, 157)); g.setStroke(new java.awt.BasicStroke(5, java.awt.BasicStroke.CAP_ROUND, java.awt.BasicStroke.JOIN_ROUND));
+        g.drawLine(10, 47, 24, 35); g.drawLine(24, 35, 34, 40); g.drawLine(34, 40, 53, 15); g.dispose();
+        return image;
+    }
 }

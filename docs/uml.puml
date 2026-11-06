@@ -1,28 +1,88 @@
 @startuml
-interface Tradable { +getSymbol(): String +getPrice(): double }
-class Stock { -symbol: String -name: String -price: double +setPrice(double): void }
-class Trader { -id: String -name: String -wallet: double +debit(double): void +credit(double): void }
-class Portfolio { -holdings: HashMap +add(...) +remove(...) +value(...): double }
-abstract class Order { -id: String -price: double -quantity: int -time: Instant +getSide(): String }
+skinparam packageStyle rectangle
+skinparam classAttributeIconSize 0
+
+interface Tradable {
+  +getSymbol(): String
+  +getPrice(): double
+}
+class Stock {
+  -symbol: String
+  -name: String
+  -price: double
+  -priceHistory: List<PricePoint>
+  +applyMarketTick(price, volume, time): void
+}
+class Trader {
+  -id: String
+  -wallet: double
+  -initialBalance: double
+  -portfolio: Portfolio
+  +debit(amount): void
+  +credit(amount): void
+}
+class Portfolio {
+  -positions: HashMap
+  -realizedProfitLoss: double
+  +add(symbol, quantity, price): void
+  +remove(symbol, quantity, price): double
+  +value(stocks): double
+}
+abstract class Order {
+  -id: String
+  -type: OrderType
+  -price: double
+  -remainingQuantity: int
+  -status: OrderStatus
+  -time: Instant
+  +getSide(): String
+  +fill(quantity): void
+}
 class BuyOrder
 class SellOrder
-class OrderBook { -buys: PriorityQueue +placeBuy(...) +placeSell(...) +match(...) }
+class OrderBook {
+  -buys: Map<String, PriorityQueue<BuyOrder>>
+  -sells: Map<String, PriorityQueue<SellOrder>>
+  +submit(order): Order
+  +cancel(orderId, trader): void
+  +onPriceTick(stock): void
+}
+class TradeHistory { -trades: ArrayList +add(trade): void }
 class Trade { +id: String +symbol: String +quantity: int +price: double }
-class TradeHistory { -trades: ArrayList +add(Trade) }
+class MarketEngine { +tickOnce(): void +getIndices(): List<MarketIndex> }
 class PriceUpdater { +run(): void +stop(): void }
-class InsufficientFundsException
+class TradingPlatform { +save(): void +submitOrder(...): Order }
+class AccountService { +deposit(trader, amount): void +withdraw(trader, amount): void }
+class TransactionLedger { +add(record): void }
+class WatchlistService { +create(traderId, name): void }
+class AnalyticsService { +forTrader(trader): Metrics }
+class CsvStore { +saveStocks(...): void +loadStocks(...): List<Stock> }
 class MainWindow
+class InsufficientFundsException
+enum OrderType { MARKET; LIMIT; STOP_LOSS; STOP_LIMIT }
+enum OrderStatus { PENDING; PARTIALLY_FILLED; TRIGGER_PENDING; FILLED; CANCELLED; REJECTED }
+
 Stock ..|> Tradable
 BuyOrder --|> Order
 SellOrder --|> Order
-OrderBook o-- BuyOrder
-OrderBook o-- SellOrder
+OrderBook o-- "*" BuyOrder : priority queue
+OrderBook o-- "*" SellOrder : priority queue
 OrderBook --> TradeHistory
+OrderBook --> TransactionLedger
 Order --> Trader
 Order --> Stock
 Trader *-- Portfolio
 TradeHistory o-- Trade
-PriceUpdater --> Stock
+MarketEngine --> Stock : updates
+PriceUpdater --> MarketEngine : background thread
+TradingPlatform *-- OrderBook
+TradingPlatform *-- MarketEngine
+TradingPlatform *-- AccountService
+TradingPlatform *-- WatchlistService
+TradingPlatform ..> CsvStore : persistence
+AnalyticsService ..> TradeHistory
+MainWindow --> TradingPlatform
 OrderBook ..> InsufficientFundsException
-MainWindow --> OrderBook
+Order --> OrderType
+Order --> OrderStatus
 @enduml
