@@ -11,6 +11,10 @@ import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import javax.swing.JMenuItem;
+import javax.swing.JTextArea;
+import javax.swing.JScrollPane;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
@@ -29,6 +33,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.ArrayDeque;
 import java.util.function.Supplier;
 
 /** Main navigation window for the stock market simulator. */
@@ -43,6 +48,8 @@ public class MainWindow extends JFrame {
     private final JLabel toast = new JLabel("Ready");
     private final javax.swing.JComboBox<String> traderChoice = new javax.swing.JComboBox<>();
     private final javax.swing.JTextField quickSearch = new javax.swing.JTextField(15);
+    private final ArrayDeque<String> notificationItems = new ArrayDeque<>();
+    private JButton activityButton;
     private String activeTrader;
     private String selectedSymbol;
 
@@ -55,15 +62,23 @@ public class MainWindow extends JFrame {
             throw new IllegalStateException("Could not load simulator data: " + ex.getMessage(), ex);
         }
         if (platform.getTraderList().isEmpty()) throw new IllegalStateException("No sample trader accounts were found.");
-        activeTrader = platform.getTraderList().get(0).getId();
+        Theme.setDark(platform.isDarkTheme());
+        Theme.install();
+        com.stocksim.ui.components.Formatters.setUseCurrencyCode(platform.isUseCurrencyCode());
+        activeTrader = platform.getDefaultTraderId().isBlank()
+                ? platform.getTraderList().get(0).getId() : platform.getDefaultTraderId();
         platform.getTraderList().forEach(t -> traderChoice.addItem(t.getId() + " · " + t.getName()));
         traderChoice.addActionListener(e -> {
             int index = traderChoice.getSelectedIndex();
             if (index >= 0 && index < platform.getTraderList().size()) {
                 activeTrader = platform.getTraderList().get(index).getId();
+                platform.setDefaultTraderId(activeTrader);
                 refreshVisible();
             }
         });
+        for (int i = 0; i < platform.getTraderList().size(); i++) {
+            if (platform.getTraderList().get(i).getId().equals(activeTrader)) traderChoice.setSelectedIndex(i);
+        }
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
         setMinimumSize(new Dimension(1120, 720));
         setSize(1440, 900);
@@ -71,6 +86,7 @@ public class MainWindow extends JFrame {
         setIconImage(createIcon());
         buildScreens();
         setContentPane(buildShell());
+        platform.getOrderBook().addEventListener(this::onTradingEvent);
         showScreen("Dashboard");
         platform.getPriceUpdater().setDelayMillis(platform.getMarket().getTickMillis());
         Thread worker = new Thread(platform.getPriceUpdater(), "stock-price-updater");
@@ -101,7 +117,8 @@ public class MainWindow extends JFrame {
         addScreen("Analytics", new AnalyticsScreen(platform, traderSupplier()));
         addScreen("Leaderboard", new LeaderboardScreen(platform));
         addScreen("Account", new AccountScreen(platform, traderSupplier(), this::notifyUser));
-        addScreen("Settings", new SettingsScreen(platform, this::saveNow));
+        addScreen("Settings", new SettingsScreen(platform, this::saveNow, this::selectDefaultTrader,
+                this::rebuildForTheme, this::notifyUser));
     }
 
     private void addScreen(String name, JPanel screen) {
@@ -127,11 +144,11 @@ public class MainWindow extends JFrame {
         quickSearch.addActionListener(e -> searchStock());
         search.add(quickSearch, BorderLayout.CENTER); search.add(searchButton, BorderLayout.EAST);
         JPanel right = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT, 9, 0)); right.setOpaque(false);
-        JButton notifications = new JButton("Activity");
-        notifications.setToolTipText("Open recent simulated market activity");
-        notifications.addActionListener(e -> showScreen("Market activity"));
+        activityButton = new JButton("Notifications");
+        activityButton.setToolTipText("Show recent order and market alerts");
+        activityButton.addActionListener(e -> showNotifications(activityButton));
         JButton settings = new JButton("Settings"); settings.addActionListener(e -> showScreen("Settings"));
-        right.add(marketState); right.add(notifications); right.add(traderChoice); right.add(settings);
+        right.add(marketState); right.add(activityButton); right.add(traderChoice); right.add(settings);
         centerHeader.add(pageTitle, BorderLayout.WEST); centerHeader.add(search, BorderLayout.CENTER);
         header.add(brand, BorderLayout.WEST); header.add(centerHeader, BorderLayout.CENTER); header.add(right, BorderLayout.EAST);
         JPanel sidebar = new JPanel();
@@ -177,6 +194,44 @@ public class MainWindow extends JFrame {
         if (current != null) current.refreshScreen();
     }
     private void notifyUser(String message) { toast.setText(message); }
+
+    private void onTradingEvent(String message) {
+        if (!platform.isNotificationsEnabled()) return;
+        SwingUtilities.invokeLater(() -> {
+            notificationItems.addFirst(java.time.LocalTime.now().withNano(0) + " · " + message);
+            while (notificationItems.size() > 30) notificationItems.removeLast();
+            if (activityButton != null) activityButton.setText("Notifications (" + notificationItems.size() + ")");
+            notifyUser(message);
+        });
+    }
+
+    private void showNotifications(java.awt.Component anchor) {
+        if (notificationItems.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "No recent trading notifications.", "Notifications", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        JPopupMenu menu = new JPopupMenu();
+        JTextArea text = new JTextArea(String.join("\n", notificationItems), 10, 48);
+        text.setEditable(false); text.setLineWrap(true); text.setWrapStyleWord(true);
+        menu.add(new JScrollPane(text));
+        menu.show(anchor, 0, anchor.getHeight());
+    }
+
+    private void selectDefaultTrader(String id) {
+        activeTrader = id;
+        for (int i = 0; i < platform.getTraderList().size(); i++) {
+            if (platform.getTraderList().get(i).getId().equals(id)) traderChoice.setSelectedIndex(i);
+        }
+        refreshVisible();
+    }
+
+    private void rebuildForTheme() {
+        Theme.setDark(platform.isDarkTheme());
+        Theme.install();
+        content.removeAll(); screens.clear(); refreshables.clear();
+        buildScreens(); setContentPane(buildShell()); SwingUtilities.updateComponentTreeUI(this);
+        showScreen("Settings"); revalidate(); repaint();
+    }
 
     private void searchStock() {
         String query = quickSearch.getText().trim();

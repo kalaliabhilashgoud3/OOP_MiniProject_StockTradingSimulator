@@ -34,6 +34,10 @@ public class TradingPlatform implements AutoCloseable {
     private final OrderBook orderBook = new OrderBook(tradeHistory, transactionLedger);
     private final MarketEngine market;
     private final PriceUpdater priceUpdater;
+    private volatile String defaultTraderId = "";
+    private volatile boolean notificationsEnabled = true;
+    private volatile boolean darkTheme;
+    private volatile boolean useCurrencyCode;
 
     private TradingPlatform(Path dataDirectory) throws IOException {
         this.dataDirectory = dataDirectory;
@@ -126,11 +130,16 @@ public class TradingPlatform implements AutoCloseable {
 
     private void loadPreferences() throws IOException {
         Path file = dataDirectory.resolve("preferences.csv");
+        if (!traders.isEmpty()) defaultTraderId = traders.keySet().iterator().next();
         if (!Files.exists(file)) return;
         for (List<String> row : CsvStore.readRows(file)) {
             if (row.size() < 2 || row.get(0).equalsIgnoreCase("key")) continue;
             switch (row.get(0)) {
                 case "marketOpen" -> market.setMarketOpen(Boolean.parseBoolean(row.get(1)));
+                case "defaultTrader" -> defaultTraderId = row.get(1);
+                case "notificationsEnabled" -> notificationsEnabled = Boolean.parseBoolean(row.get(1));
+                case "darkTheme" -> darkTheme = Boolean.parseBoolean(row.get(1));
+                case "currencyFormat" -> useCurrencyCode = "INR".equalsIgnoreCase(row.get(1));
                 case "tickMillis" -> {
                     try { priceUpdater.setDelayMillis(Integer.parseInt(row.get(1))); }
                     catch (NumberFormatException ignored) { /* Keep the safe default when the preference is invalid. */ }
@@ -138,6 +147,7 @@ public class TradingPlatform implements AutoCloseable {
                 default -> { /* Ignore settings added by a later version. */ }
             }
         }
+        if (!traders.containsKey(defaultTraderId) && !traders.isEmpty()) defaultTraderId = traders.keySet().iterator().next();
     }
 
     public synchronized void save() throws IOException {
@@ -154,7 +164,11 @@ public class TradingPlatform implements AutoCloseable {
         CsvStore.writeRows(dataDirectory.resolve("preferences.csv"), List.of(
                 List.of("key", "value"),
                 List.of("marketOpen", Boolean.toString(market.isMarketOpen())),
-                List.of("tickMillis", Integer.toString(market.getTickMillis()))));
+                List.of("tickMillis", Integer.toString(market.getTickMillis())),
+                List.of("defaultTrader", defaultTraderId),
+                List.of("notificationsEnabled", Boolean.toString(notificationsEnabled)),
+                List.of("darkTheme", Boolean.toString(darkTheme)),
+                List.of("currencyFormat", useCurrencyCode ? "INR" : "SYMBOL")));
     }
 
     public Map<String, Stock> getStocks() { return java.util.Collections.unmodifiableMap(stocks); }
@@ -175,6 +189,17 @@ public class TradingPlatform implements AutoCloseable {
     public OrderBook getOrderBook() { return orderBook; }
     public MarketEngine getMarket() { return market; }
     public PriceUpdater getPriceUpdater() { return priceUpdater; }
+    public String getDefaultTraderId() { return defaultTraderId; }
+    public void setDefaultTraderId(String id) {
+        if (!traders.containsKey(id)) throw new IllegalArgumentException("Choose a listed trader account.");
+        defaultTraderId = id;
+    }
+    public boolean isNotificationsEnabled() { return notificationsEnabled; }
+    public void setNotificationsEnabled(boolean enabled) { notificationsEnabled = enabled; }
+    public boolean isDarkTheme() { return darkTheme; }
+    public void setDarkTheme(boolean enabled) { darkTheme = enabled; }
+    public boolean isUseCurrencyCode() { return useCurrencyCode; }
+    public void setUseCurrencyCode(boolean enabled) { useCurrencyCode = enabled; }
 
     public Order submitOrder(String traderId, String symbol, boolean buy, OrderType type,
                              int quantity, double limitPrice, double triggerPrice)

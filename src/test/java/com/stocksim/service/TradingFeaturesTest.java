@@ -71,6 +71,10 @@ class TradingFeaturesTest {
         platform.getMarket().tickOnce();
         platform.getMarket().setTickMillis(750);
         platform.getMarket().setMarketOpen(false);
+        platform.setDefaultTraderId(trader.getId());
+        platform.setNotificationsEnabled(false);
+        platform.setDarkTheme(true);
+        platform.setUseCurrencyCode(true);
         platform.save();
         platform.getPriceUpdater().stop();
         platform.getMarket().close();
@@ -81,6 +85,10 @@ class TradingFeaturesTest {
         assertFalse(loaded.getTransactionLedger().getAll().isEmpty());
         assertEquals(750, loaded.getMarket().getTickMillis());
         assertFalse(loaded.getMarket().isMarketOpen());
+        assertEquals(trader.getId(), loaded.getDefaultTraderId());
+        assertFalse(loaded.isNotificationsEnabled());
+        assertTrue(loaded.isDarkTheme());
+        assertTrue(loaded.isUseCurrencyCode());
         loaded.close();
     }
 

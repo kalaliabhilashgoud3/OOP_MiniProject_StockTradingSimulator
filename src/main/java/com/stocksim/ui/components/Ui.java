@@ -74,12 +74,12 @@ public final class Ui {
         table.setShowVerticalLines(false);
         table.setIntercellSpacing(new Dimension(0, 1));
         table.setFillsViewportHeight(true);
-        table.setSelectionBackground(new Color(221, 235, 255));
-        table.setGridColor(new Color(235, 239, 245));
+        table.setSelectionBackground(Color.decode(Theme.BACKGROUND.getRed() < 30 ? "#314A63" : "#DDEBFF"));
+        table.setGridColor(Color.decode(Theme.BACKGROUND.getRed() < 30 ? "#334150" : "#EBEFF5"));
         JTableHeader header = table.getTableHeader();
         header.setPreferredSize(new Dimension(header.getWidth(), 38));
         header.setFont(Theme.LABEL);
-        header.setBackground(new Color(236, 242, 249));
+        header.setBackground(Color.decode(Theme.BACKGROUND.getRed() < 30 ? "#243341" : "#ECF2F9"));
         header.setForeground(Theme.NAVY);
         DefaultTableCellRenderer renderer = new DefaultTableCellRenderer();
         renderer.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 8));

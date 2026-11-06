@@ -21,6 +21,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.PriorityQueue;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 
 /** Price-time priority matcher with stop orders, cancellation, settlement, and virtual charges. */
 public class OrderBook {
@@ -36,6 +38,7 @@ public class OrderBook {
     private final Map<String, Double> reservedBuyPrice = new HashMap<>();
     private final TradeHistory history;
     private final TransactionLedger ledger;
+    private final CopyOnWriteArrayList<Consumer<String>> eventListeners = new CopyOnWriteArrayList<>();
 
     public OrderBook(TradeHistory history) { this(history, new TransactionLedger()); }
 
@@ -66,6 +69,8 @@ public class OrderBook {
                 addToBook(order);
                 match(order.getStock());
             }
+            publish("Order " + order.getId() + " " + order.getStatus().toString().toLowerCase()
+                    + " · " + order.getSide() + " " + order.getStock().getSymbol());
             return order;
         } catch (InsufficientFundsException | IllegalArgumentException | IllegalStateException ex) {
             if (reservationCreated) releaseReservation(order);
@@ -138,6 +143,7 @@ public class OrderBook {
             sell.fill(quantity);
             history.add(new Trade(stock.getSymbol(), buy.getTrader().getId(),
                     sell.getTrader().getId(), quantity, executionPrice));
+            publish("Trade executed · " + quantity + " " + stock.getSymbol() + " at " + executionPrice);
             stock.applyMarketTick(executionPrice, quantity, Instant.now());
             if (buy.getStatus() == OrderStatus.FILLED) {
                 buyBook.poll();
@@ -188,6 +194,7 @@ public class OrderBook {
                     : stock.getPrice() <= order.getTriggerPrice();
             if (!isTriggered) continue;
             order.markTriggered();
+            publish("Stop order triggered · " + order.getStock().getSymbol() + " " + order.getSide());
             if (order.getType() == OrderType.STOP_LOSS) {
                 executeAgainstSimulatedMarket(order, stock.getPrice());
             } else {
@@ -256,6 +263,7 @@ public class OrderBook {
         }
         removeFromQueue(order);
         order.cancel();
+        publish("Order cancelled · " + order.getStock().getSymbol() + " · " + reason);
     }
 
     private void releaseReservation(Order order) {
@@ -313,6 +321,12 @@ public class OrderBook {
         return bid == 0 || ask == 0 ? 0 : ask - bid;
     }
     public TransactionLedger getLedger() { return ledger; }
+    public void addEventListener(Consumer<String> listener) { eventListeners.add(Objects.requireNonNull(listener)); }
+    private void publish(String event) {
+        for (Consumer<String> listener : eventListeners) {
+            try { listener.accept(event); } catch (RuntimeException ignored) { /* UI listeners must not interrupt matching. */ }
+        }
+    }
 
     /** Restores persisted orders without charging balances a second time. */
     public synchronized void restore(Order order) {
