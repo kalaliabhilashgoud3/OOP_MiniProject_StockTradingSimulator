@@ -30,10 +30,12 @@ public class TradingPlatform implements AutoCloseable {
     private final TransactionLedger transactionLedger = new TransactionLedger();
     private final PerformanceHistory performanceHistory = new PerformanceHistory();
     private final WatchlistService watchlists = new WatchlistService();
+    private final PriceAlertService priceAlerts = new PriceAlertService();
     private final AccountService accounts = new AccountService(transactionLedger);
     private final OrderBook orderBook = new OrderBook(tradeHistory, transactionLedger);
     private final MarketEngine market;
     private final PriceUpdater priceUpdater;
+    private final java.util.concurrent.CopyOnWriteArrayList<java.util.function.Consumer<String>> notificationListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
     private volatile String defaultTraderId = "";
     private volatile boolean notificationsEnabled = true;
     private volatile boolean darkTheme;
@@ -47,9 +49,11 @@ public class TradingPlatform implements AutoCloseable {
         loadAccountsAndOrders();
         loadWatchlists();
         market = new MarketEngine(stocks.values());
+        orderBook.addEventListener(this::publishNotification);
         market.addListener(() -> {
             stocks.values().forEach(orderBook::onPriceTick);
             performanceHistory.record(traders.values(), stocks);
+            stocks.values().forEach(stock -> priceAlerts.check(stock).forEach(this::publishNotification));
         });
         priceUpdater = new PriceUpdater(market);
         loadPreferences();
@@ -90,6 +94,8 @@ public class TradingPlatform implements AutoCloseable {
         if (Files.exists(ledger)) transactionLedger.addAll(CsvStore.loadTransactions(ledger));
         Path history = dataDirectory.resolve("price_history.csv");
         if (Files.exists(history)) CsvStore.loadPriceHistory(stocks.values(), history);
+        Path alerts = dataDirectory.resolve("price_alerts.csv");
+        if (Files.exists(alerts)) CsvStore.loadPriceAlerts(alerts).forEach(priceAlerts::restore);
         Path performance = dataDirectory.resolve("performance.csv");
         if (Files.exists(performance)) CsvStore.loadPerformance(performanceHistory, performance);
     }
@@ -159,6 +165,7 @@ public class TradingPlatform implements AutoCloseable {
         CsvStore.saveTransactions(transactionLedger, dataDirectory.resolve("transactions.csv"));
         CsvStore.saveOrders(orderBook.getOrders(), dataDirectory.resolve("active_orders.csv"));
         CsvStore.saveWatchlists(watchlists, dataDirectory.resolve("watchlists.csv"));
+        CsvStore.savePriceAlerts(priceAlerts, dataDirectory.resolve("price_alerts.csv"));
         CsvStore.savePriceHistory(stocks.values(), dataDirectory.resolve("price_history.csv"));
         CsvStore.savePerformance(performanceHistory, dataDirectory.resolve("performance.csv"));
         CsvStore.writeRows(dataDirectory.resolve("preferences.csv"), List.of(
@@ -185,6 +192,7 @@ public class TradingPlatform implements AutoCloseable {
     public TransactionLedger getTransactionLedger() { return transactionLedger; }
     public PerformanceHistory getPerformanceHistory() { return performanceHistory; }
     public WatchlistService getWatchlists() { return watchlists; }
+    public PriceAlertService getPriceAlerts() { return priceAlerts; }
     public AccountService getAccounts() { return accounts; }
     public OrderBook getOrderBook() { return orderBook; }
     public MarketEngine getMarket() { return market; }
@@ -200,6 +208,14 @@ public class TradingPlatform implements AutoCloseable {
     public void setDarkTheme(boolean enabled) { darkTheme = enabled; }
     public boolean isUseCurrencyCode() { return useCurrencyCode; }
     public void setUseCurrencyCode(boolean enabled) { useCurrencyCode = enabled; }
+    public void addNotificationListener(java.util.function.Consumer<String> listener) {
+        notificationListeners.add(java.util.Objects.requireNonNull(listener));
+    }
+    private void publishNotification(String message) {
+        notificationListeners.forEach(listener -> {
+            try { listener.accept(message); } catch (RuntimeException ignored) { /* Notifications cannot interrupt trading. */ }
+        });
+    }
 
     public Order submitOrder(String traderId, String symbol, boolean buy, OrderType type,
                              int quantity, double limitPrice, double triggerPrice)

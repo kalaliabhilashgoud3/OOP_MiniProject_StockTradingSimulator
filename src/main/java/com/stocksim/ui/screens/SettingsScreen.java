@@ -1,6 +1,7 @@
 package com.stocksim.ui.screens;
 
 import com.stocksim.model.Trader;
+import com.stocksim.model.MarketSentiment;
 import com.stocksim.service.TradingPlatform;
 import com.stocksim.ui.components.RoundedPanel;
 import com.stocksim.ui.components.Theme;
@@ -97,7 +98,18 @@ public class SettingsScreen extends JPanel {
         about.addActionListener(e -> JOptionPane.showMessageDialog(this,
                 "Stock Trading Simulator 2.0\nMNR University · OOP Java · II-Year I-Sem\nOffline paper-trading simulator. Quotes and funds are virtual.",
                 "About", JOptionPane.INFORMATION_MESSAGE));
-        actions.add(save); actions.add(backup); actions.add(about);
+        var reset = Ui.button("Reset market session", false);
+        reset.addActionListener(e -> {
+            int answer = JOptionPane.showConfirmDialog(this,
+                    "Reset simulated day highs, lows, volume, and market mood? Accounts, orders, and history will be kept.",
+                    "Reset market session", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+            if (answer != JOptionPane.YES_OPTION) return;
+            platform.getStocks().values().forEach(stock -> stock.resetSession());
+            platform.getMarket().setSentiment(MarketSentiment.SIDEWAYS);
+            saved.run();
+            notify.accept("Market session stats reset. Your account and trade history were kept.");
+        });
+        actions.add(save); actions.add(backup); actions.add(reset); actions.add(about);
         card.add(actions, BorderLayout.SOUTH);
         page.add(card, BorderLayout.NORTH);
         add(page, BorderLayout.CENTER);

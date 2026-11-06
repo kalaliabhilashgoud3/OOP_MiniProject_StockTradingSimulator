@@ -13,6 +13,7 @@ data/price_history.csv
 data/performance.csv
 data/preferences.csv
 data/backups/
+data/price_alerts.csv
 *.class
 *.log
 .idea/

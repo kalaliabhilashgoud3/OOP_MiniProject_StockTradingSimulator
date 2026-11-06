@@ -16,6 +16,7 @@ import com.stocksim.service.TradeHistory;
 import com.stocksim.service.TransactionLedger;
 import com.stocksim.service.WatchlistService;
 import com.stocksim.service.PerformanceHistory;
+import com.stocksim.service.PriceAlertService;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -197,6 +198,31 @@ public final class CsvStore {
             if (row.size() < 3) throw new IOException("Watchlist row is incomplete.");
             List<String> symbols = at(row, 2).isBlank() ? List.of() : List.of(at(row, 2).split("\\|"));
             out.add(new WatchlistRow(at(row, 0), at(row, 1), symbols));
+        }
+        return out;
+    }
+
+    public static void savePriceAlerts(PriceAlertService service, Path file) throws IOException {
+        List<List<String>> rows = new ArrayList<>();
+        rows.add(List.of("id", "traderId", "symbol", "direction", "targetPrice", "active"));
+        for (PriceAlertService.Alert alert : service.getAlerts()) {
+            rows.add(List.of(alert.id(), alert.traderId(), alert.symbol(), alert.direction().name(),
+                    d(alert.targetPrice()), Boolean.toString(alert.active())));
+        }
+        writeRows(file, rows);
+    }
+
+    public static List<PriceAlertService.Alert> loadPriceAlerts(Path file) throws IOException {
+        List<PriceAlertService.Alert> out = new ArrayList<>();
+        for (List<String> row : dataRows(readRows(file))) {
+            if (row.size() < 6) throw new IOException("Price alert row is incomplete.");
+            try {
+                out.add(new PriceAlertService.Alert(at(row, 0), at(row, 1), at(row, 2),
+                        PriceAlertService.Direction.valueOf(at(row, 3)), number(row, 4, -1),
+                        Boolean.parseBoolean(at(row, 5))));
+            } catch (IllegalArgumentException ex) {
+                throw new IOException("Price alert row contains an invalid value.", ex);
+            }
         }
         return out;
     }

@@ -69,6 +69,8 @@ class TradingFeaturesTest {
         double original = trader.getWallet();
         platform.getAccounts().deposit(trader, 123.45);
         platform.getMarket().tickOnce();
+        platform.getPriceAlerts().add(trader.getId(), platform.getStockList().get(0).getSymbol(),
+                PriceAlertService.Direction.BELOW, 0.01);
         platform.getMarket().setTickMillis(750);
         platform.getMarket().setMarketOpen(false);
         platform.setDefaultTraderId(trader.getId());
@@ -89,6 +91,7 @@ class TradingFeaturesTest {
         assertFalse(loaded.isNotificationsEnabled());
         assertTrue(loaded.isDarkTheme());
         assertTrue(loaded.isUseCurrencyCode());
+        assertEquals(1, loaded.getPriceAlerts().getAlerts().size());
         loaded.close();
     }
 
@@ -98,5 +101,16 @@ class TradingFeaturesTest {
         com.stocksim.util.CsvStore.writeRows(csv, java.util.List.of(java.util.List.of("value"), java.util.List.of("new")));
         java.nio.file.Files.writeString(csv, "\"broken\n");
         assertEquals("safe", com.stocksim.util.CsvStore.readRows(csv).get(1).get(0));
+    }
+
+    @Test void priceAlertsTriggerOnceWhenTargetIsCrossed() {
+        var service = new PriceAlertService();
+        var stock = new Stock("XYZ", "Example", 25);
+        service.add("T", "XYZ", PriceAlertService.Direction.ABOVE, 30);
+        assertTrue(service.check(stock).isEmpty());
+        stock.applyMarketTick(31, 1, java.time.Instant.now());
+        assertEquals(1, service.check(stock).size());
+        assertTrue(service.check(stock).isEmpty());
+        assertFalse(service.getAlerts().get(0).active());
     }
 }

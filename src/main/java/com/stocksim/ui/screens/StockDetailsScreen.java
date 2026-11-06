@@ -11,6 +11,7 @@ import com.stocksim.ui.components.Ui;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JOptionPane;
 import java.awt.BorderLayout;
 import java.awt.GridLayout;
 import java.util.function.Consumer;
@@ -40,8 +41,9 @@ public class StockDetailsScreen extends JPanel implements Refreshable {
         JPanel page = Ui.page("Stock details", "Explore simulated price action and company metrics. No real-time exchange data is connected.");
         JPanel body = new JPanel(new BorderLayout(0, 14)); body.setOpaque(false);
         var watch = Ui.button("Add to watchlist", false);
+        var alert = Ui.button("Set price alert", false);
         var trade = Ui.button("Buy / Sell", true);
-        JPanel bar = Ui.row(new JLabel("Stock"), symbols, style, range, watch, trade);
+        JPanel bar = Ui.row(new JLabel("Stock"), symbols, style, range, watch, alert, trade);
         body.add(bar, BorderLayout.NORTH);
         RoundedPanel detail = Ui.card("Simulated quote");
         JPanel header = new JPanel(new BorderLayout(12, 6)); header.setOpaque(false);
@@ -67,6 +69,27 @@ public class StockDetailsScreen extends JPanel implements Refreshable {
             String list = platform.getWatchlists().getNames(traderNow.getId()).get(0);
             platform.getWatchlists().add(traderNow.getId(), list, stock.getSymbol());
             notify.accept(stock.getSymbol() + " added to " + list + ".");
+        });
+        alert.addActionListener(event -> {
+            Stock stock = selected();
+            if (stock == null) return;
+            String target = JOptionPane.showInputDialog(this, "Alert target price for " + stock.getSymbol(),
+                    String.format(java.util.Locale.ROOT, "%.2f", stock.getPrice()));
+            if (target == null) return;
+            Object[] choices = {"When price rises above", "When price falls below"};
+            int direction = JOptionPane.showOptionDialog(this, "Choose when to notify you.", "Price alert",
+                    JOptionPane.DEFAULT_OPTION, JOptionPane.QUESTION_MESSAGE, null, choices, choices[0]);
+            if (direction < 0) return;
+            try {
+                double threshold = Double.parseDouble(target.trim());
+                var trader = traderSupplier.get();
+                var alertItem = platform.getPriceAlerts().add(trader.getId(), stock.getSymbol(),
+                        direction == 0 ? com.stocksim.service.PriceAlertService.Direction.ABOVE
+                                : com.stocksim.service.PriceAlertService.Direction.BELOW, threshold);
+                notify.accept("Price alert " + alertItem.id() + " set for " + stock.getSymbol() + ".");
+            } catch (IllegalArgumentException ex) {
+                notify.accept("Enter a valid positive alert price.");
+            }
         });
         trade.addActionListener(event -> { Stock stock = selected(); if (stock != null) openTrade.accept(stock); });
         refreshScreen();

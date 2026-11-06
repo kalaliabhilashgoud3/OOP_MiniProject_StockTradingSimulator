@@ -86,7 +86,7 @@ public class MainWindow extends JFrame {
         setIconImage(createIcon());
         buildScreens();
         setContentPane(buildShell());
-        platform.getOrderBook().addEventListener(this::onTradingEvent);
+        platform.addNotificationListener(this::onTradingEvent);
         showScreen("Dashboard");
         platform.getPriceUpdater().setDelayMillis(platform.getMarket().getTickMillis());
         Thread worker = new Thread(platform.getPriceUpdater(), "stock-price-updater");
